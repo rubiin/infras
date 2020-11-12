@@ -29,6 +29,9 @@ services:
           - "6370:6379"
         restart: unless-stopped
 
+volumes:
+  data:
+
 networks:
         orbis-net:
             name: orbis-network
