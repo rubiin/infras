@@ -26,8 +26,8 @@ services:
         networks:
           - orbis-net
         ports:
+          - "6379:6379"
         command: redis-server --requirepass yourpassword
-          - "6370:6379"
         restart: unless-stopped
 
 volumes:
