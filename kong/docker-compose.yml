@@ -106,6 +106,8 @@ services:
         restart: unless-stopped
         networks:
         - orbis-net
+        volumes:
+        - ./konga_users.js:/app/user_seed.js:ro
         environment:
             DB_ADAPTER: postgres
             DB_HOST: kong-database
