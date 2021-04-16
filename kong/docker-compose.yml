@@ -3,7 +3,7 @@ version: '3.5'
 services:
     kong-database:
         container_name: kong-database
-        image: postgres:9.6
+        image: postgres:9.6-alpine
         networks:
         - orbis-net
         ports:
