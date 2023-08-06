@@ -8,9 +8,7 @@ Services are:
 - [x] [Redis](https://redis.io/) as cache
 - [x] [Minio](https://min.io/) as object storage
 - [x] [RabbitMQ](https://www.rabbitmq.com/) as message broker
-- [] [Elasticsearch](https://www.elastic.co/) as search engine
-- [] [Kibana](https://www.elastic.co/kibana) as data visualization
-- [] [Logstash](https://www.elastic.co/logstash) as data processing
+- [x] [OpenObserver](https://openobservability.io/) as unified view of logs, metrics and traces.
 - [x] [pgweb] as web-based PostgreSQL database browser
 
 ## Requirements
