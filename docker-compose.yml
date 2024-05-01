@@ -1,14 +1,18 @@
 version: 3.9
 services:
-    nestify:
-        container_name: nestify
+
+
+# App
+# This service runs the api
+    api:
+        container_name: api
         env_file: env/.env.${ENV}
         build:
             context: .
             dockerfile: ./docker/Dockerfile
         image: nestify
         depends_on:
-            - traefik
+            - proxy
             - redis
             - rabbitmq
             - database
@@ -24,7 +28,6 @@ services:
             - traefik.http.routers.nestify.tls.certresolver=certresolver
             - traefik.http.routes.nestify.middlewares=traefik-headers,traefik-compress,traefik-ratelimit
 
-
         stdin_open: true
         tty: true
         networks:
@@ -33,9 +36,12 @@ services:
             - .:/usr/src/app
             - /usr/src/app/node_modules
 
-    traefik:
+
+# Traefik service
+# This service runs the Traefik reverse proxy which is used to expose the other services
+    proxy:
         image: traefik:v2.10.4
-        container_name: traefik
+        container_name: proxy
         restart: unless-stopped
         command:
             # Enable Docker in Traefik, so that it reads labels from Docker services
@@ -53,8 +59,10 @@ services:
             - --log.filePath=/logs/traefik.log
             - --accesslog=true
             - --accesslog.filePath=/logs/access.log
+            - --accesslog.bufferingsize=50
             # Enable the Dashboard and API
             - --api
+            - --serverstransport.maxidleconnsperhost=100000
             # Enable the Dashboard and API in insecure mode for local development
             - --api.insecure=true
             # Define HTTP entrypoint on port 80
@@ -71,17 +79,40 @@ services:
             - --providers.middlewares.httpsredirect.redirectscheme.scheme=https
             # Enable Let's Encrypt staging environment for local development , remove this line for production
             - --certificatesresolvers.certresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
-
+    
         labels:
-            - traefik.enable=true
-            - traefik.http.middlewares.traefik-headers.headers.framedeny=true
-            - traefik.http.middlewares.traefik-headers.headers.browserxssfilter=true
-            - traefik.http.middlewares.traefik-headers.headers.contentTypeNosniff=true
-            - traefik.http.middlewares.traefik-headers.headers.permissionsPolicy=camera 'none'; geolocation 'none'; microphone 'none'; payment 'none'; usb 'none'; vr 'none';
-            - traefik.http.middlewares.traefik-compress.compress=true
-            - traefik.http.middlewares.traefik-ratelimit.ratelimit.average=100
-            - traefik.http.middlewares.traefik-ratelimit.ratelimit.burst=50
-            - traefik.http.middlewares.traefik-ratelimit.ratelimit.period=1m
+            - "traefik.enable=true"
+            - "traefik.http.middlewares.traefik-compress.compress=true"
+            - "traefik.http.middlewares.traefik-ratelimit.ratelimit.average=100" # Set average rate limit to 100 requests per minute
+            - "traefik.http.middlewares.traefik-ratelimit.ratelimit.burst=50" # Set burst rate limit to 50 requests
+            - "traefik.http.middlewares.traefik-ratelimit.ratelimit.period=1m" # Set rate limit evaluation period to 1 minute
+            - "traefik.http.middlewares.traefik-retry.retry.attempts=4" # Allow up to 4 retry attempts
+            - "traefik.http.middlewares.traefik-retry.retry.initialinterval=100ms" # Set initial retry interval to 100 milliseconds
+            # - "traefik.http.middlewares.security-headers.headers.accesscontrolallowmethods=GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS" # Allow specified HTTP methods
+            # - "traefik.http.middlewares.security-headers.headers.accesscontrolalloworiginlist=*" # Allow specified HTTP origin list
+            # - "traefik.http.middlewares.security-headers.headers.accessControlAllowCredentials=true" # Add control allow credentials header
+            # - "traefik.http.middlewares.security-headers.headers.accesscontrolallowheaders=*" # Add control allow credentials header
+            # - "traefik.http.middlewares.security-headers.headers.accesscontrolmaxage=3600" # Set value for Access-Control-Max-Age header
+            # - "traefik.http.middlewares.security-headers.headers.addvaryheader=true" # Add Vary header to responses
+            - "traefik.http.middlewares.security-headers.headers.framedeny=true" # Enable frame denial for clickjacking protection
+            - "traefik.http.middlewares.security-headers.headers.contenttypenosniff=true" # Enable Content-Type nosniff
+            - "traefik.http.middlewares.security-headers.headers.browserxssfilter=false" # Enable browser XSS filter
+            - "traefik.http.middlewares.security-headers.headers.referrerpolicy=no-referrer" # Set Referrer-Policy header
+            - "traefik.http.middlewares.security-headers.headers.permissionsPolicy=camera 'none'; geolocation 'none'; microphone 'none'; payment 'none'; usb 'none'; vr 'none';" # Set Feature-Policy header values
+            - "traefik.http.middlewares.security-headers.headers.customresponseheaders.X-Robots-Tag=none,noarchive,nosnippet,notranslate,noimageindex" # Set custom response headers
+            - "traefik.http.middlewares.security-headers.headers.customresponseheaders.X-Powered-By=" # Remove X-Powered-By header
+            - "traefik.http.middlewares.security-headers.headers.customresponseheaders.X-Download-Options=noopen" # Add X-Download-Options header
+            - "traefik.http.middlewares.security-headers.headers.customresponseheaders.X-DNS-Prefetch-Control=off" # Add X-DNS-Prefetch-Control header
+            - "traefik.http.middlewares.security-headers.headers.customresponseheaders.Origin-Agent-Cluster=?1" # Add Origin-Agent-Cluster header
+            - "traefik.http.middlewares.security-headers.headers.contentsecuritypolicy=Content-Security-Policy: default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests"
+            - "traefik.http.middlewares.security-headers.headers.hostsproxyheaders=X-Forwarded-Host" # Configure proxy headers for X-Forwarded-Host
+            - "traefik.http.middlewares.security-headers.headers.sslredirect=true" # Enable HTTPS redirection
+            - "traefik.http.middlewares.security-headers.headers.sslproxyheaders.X-Forwarded-Proto=https" # Configure proxy headers for X-Forwarded-Proto
+            - "traefik.http.middlewares.security-headers.headers.stsseconds=15552000" # Set Strict-Transport-Security max-age value
+            - "traefik.http.middlewares.security-headers.headers.stsincludesubdomains=true" # Include subdomains in Strict-Transport-Security header
+            - "traefik.http.middlewares.security-headers.headers.stspreload=true" # Enable HTTP Strict Transport Security preload list
+            - "traefik.http.middlewares.security-headers.headers.forcestsheader=true" # Force Strict-Transport-Security header on all responses
+
 
         networks:
             - nestify-network
@@ -102,12 +133,15 @@ services:
             retries: 3
             start_period: 5s
 
+
+# Redis service
+# This service runs the Redis database
     redis:
         container_name: redis
-        image: redis:7.0.12-alpine
+        image: redis:7.2.4-alpine
         restart: unless-stopped
         depends_on:
-            - traefik
+            - proxy
         ports:
             - "6379:6379"
         networks:
@@ -141,26 +175,27 @@ services:
           timeout: 20s
           retries: 3
 
+# RabbitMQ service
+# This service runs the RabbitMQ message broker
     rabbitmq:
         container_name: rabbitmq
-        image: rabbitmq:3.12.2-management-alpine
+        image: rabbitmq:3.13.1-management-alpine
         env_file: env/.env.${ENV}
         restart: unless-stopped
-        networks:
-            - nestify-network
         depends_on:
-            - traefik
+            - proxy
         environment:
-            - RABBITMQ_DEFAULT_USER=nestify
-        ports:
-            - "5672:5672"
-            - "15672:15672"
+            - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+            - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
         volumes:
             - rabbitmq-data:/var/lib/rabbitmq/mnesia/
+        networks:
+            - nestify-network
         healthcheck:
           test: rabbitmq-diagnostics check_port_connectivity
           interval: 30s
           timeout: 30s
+          retries: 10
           retries: 10
 
     database:
@@ -169,7 +204,7 @@ services:
         restart: unless-stopped
         env_file: env/.env.${ENV}
         depends_on:
-            - traefik
+            - proxy
         networks:
             - nestify-network
         ports:
@@ -182,6 +217,9 @@ services:
           timeout: 5s
           retries: 5
 
+
+# Db client service
+# This service runs the db clinet for database
     pgweb:
         image: sosedoff/pgweb
         container_name: pgweb
@@ -201,6 +239,8 @@ services:
             timeout: 5s
             retries: 5
 
+# Log searching service
+# This service runs the open observe
     openobserve:
         image: public.ecr.aws/zinclabs/openobserve:latest
         container_name: openobserve
@@ -220,6 +260,7 @@ volumes:
     redis-data:
     rabbitmq-data:
     postgres_data:
+    open-observe-data:
 
 networks:
     nestify-network:
